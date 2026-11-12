@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { Pressable, TextInput, View, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import { useApp } from "../lib/state";
-import { content } from "../lib/client";
 import { Shell } from "../components/Shell";
 import { TopicTree } from "../components/TopicTree";
 import {
@@ -14,7 +13,7 @@ import {
   styles,
 } from "../components/ui";
 export default function Explore() {
-  const { tr, catalog, error, retry, language, progress, session } = useApp();
+  const { tr, catalog, error, retry, language, session } = useApp();
   const { width } = useWindowDimensions(),
     compact = width < 700;
   const [query, setQuery] = useState(""),
@@ -35,12 +34,11 @@ export default function Explore() {
       })),
     ),
   );
-  const filtered = lessons.filter(
-    (l) =>
-      (!selected || selected === l.disciplineId) &&
-      `${l.title} ${l.topic} ${l.discipline}`
-        .toLocaleLowerCase(language)
-        .includes(query.toLocaleLowerCase(language)),
+  const term = query.trim().toLocaleLowerCase(language);
+  const matches = (value: string) => value.toLocaleLowerCase(language).includes(term);
+  const visibleDisciplines = catalog.disciplines.filter(d =>
+    (!selected || selected === d.id) &&
+    (matches(d.name) || d.topics.some(t => matches(t.name) || t.lessons.some(l => matches(`${l.title} ${l.summary}`)))),
   );
   const featured = lessons[0];
   return (
@@ -318,9 +316,8 @@ export default function Explore() {
                   letterSpacing: 0.5,
                 }}
               >
-                {count
-                  ? `${count} ${tr("LESSON AVAILABLE", "LEÇON DISPONIBLE")}`
-                  : tr("CURRICULUM IN PREPARATION", "PROGRAMME EN PRÉPARATION")}
+                {d.topics.length} {tr("TOPICS", "THÈMES")}
+                {count > 0 && ` · ${count} ${count === 1 ? tr("LESSON", "LEÇON") : tr("LESSONS", "LEÇONS")}`}
               </Label>
             </Pressable>
           );
@@ -339,10 +336,10 @@ export default function Explore() {
         <Label display accessibilityRole="header" style={{ fontSize: 25 }}>
           {selected
             ? catalog.disciplines.find((d) => d.id === selected)?.name
-            : tr("Your next discovery", "Votre prochaine découverte")}
+            : tr("Explore the curriculum", "Explorez le programme")}
         </Label>
         <TextInput
-          accessibilityLabel={tr("Search lessons", "Rechercher des leçons")}
+          accessibilityLabel={tr("Search topics and lessons", "Rechercher des thèmes et des leçons")}
           value={query}
           onChangeText={setQuery}
           placeholder={tr(
@@ -371,92 +368,27 @@ export default function Explore() {
           </Label>
         </Pressable>
       )}
-      {selected && (
-        <TopicTree
-          topics={
-            catalog.disciplines.find((d) => d.id === selected)?.topics || []
-          }
-        />
-      )}
-      <View style={{ marginTop: 18, gap: 12 }}>
-        {filtered.map((l) => (
-          <Pressable
-            key={l.id}
-            accessibilityRole="link"
-            onHoverIn={() =>
-              content(
-                "lessons",
-                catalog.cdnBaseUrl,
-                l.id,
-                language,
-                l.version,
-              ).catch(() => {})
-            }
-            onPress={() => router.push(`/lesson/${l.id}`)}
-            style={({ hovered }: { pressed: boolean; hovered?: boolean }) => [
-              styles.card,
-              {
-                flexDirection: "row",
-                gap: 18,
-                alignItems: "center",
-                borderColor: hovered ? "#A5B394" : colors.line,
-              },
-            ]}
-          >
-            <View
-              style={{
-                width: 50,
-                height: 55,
-                borderRadius: 9,
-                backgroundColor: "#E5EBD8",
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <Label style={{ fontSize: 26 }}>◉</Label>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Label
-                style={{ fontSize: 10, letterSpacing: 1, color: colors.muted }}
-              >
-                {l.discipline.toLocaleUpperCase(language)} · {l.minutes} MIN
+      <View style={{ marginTop: 18, gap: 24 }}>
+        {visibleDisciplines.map(discipline => (
+          <View key={discipline.id} style={{ gap: 12 }}>
+            {!selected && (
+              <Label display accessibilityRole="header" style={{ fontSize: 21 }}>
+                {discipline.name}
               </Label>
-              <Label display style={{ fontSize: 19, marginTop: 5 }}>
-                {l.title}
-              </Label>
-              <Label
-                style={{ fontSize: 12, color: colors.muted, marginTop: 4 }}
-              >
-                {l.topic}
-              </Label>
-            </View>
-            <Label>
-              {progress.some((p) => p.lessonId === l.id && p.completed)
-                ? "✓"
-                : "→"}
-            </Label>
-          </Pressable>
+            )}
+            <TopicTree
+              topics={discipline.topics}
+              query={matches(discipline.name) ? "" : query}
+            />
+          </View>
         ))}
-        {!filtered.length && (
-          <View style={[styles.card, { padding: 28 }]}>
+        {!visibleDisciplines.length && (
+          <View style={[styles.card, { padding: 24 }]}>
             <Label display style={{ fontSize: 22 }}>
-              {query
-                ? tr("No lessons found", "Aucune leçon trouvée")
-                : tr(
-                    "Good things take a little time.",
-                    "Les belles choses prennent du temps.",
-                  )}
+              {tr("No topics or lessons found", "Aucun thème ni aucune leçon trouvés")}
             </Label>
             <Label style={{ color: colors.muted, marginTop: 8 }}>
-              {query
-                ? tr(
-                    "Try a different search or clear the discipline filter.",
-                    "Essayez une autre recherche ou retirez le filtre.",
-                  )
-                : tr(
-                    "No lessons have been published yet. Your library is ready for future content.",
-                    "Aucune leçon n’a encore été publiée. Votre bibliothèque est prête à accueillir du contenu.",
-                  )}
+              {tr("Try another search or clear the discipline filter.", "Essayez une autre recherche ou retirez le filtre de discipline.")}
             </Label>
           </View>
         )}
