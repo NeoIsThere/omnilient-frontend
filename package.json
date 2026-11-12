@@ -1,0 +1,22 @@
+{
+  "name": "omnilient-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/mobile",
+    "packages/contracts"
+  ],
+  "scripts": {
+    "build:contracts": "npm run build -w @omnilient/contracts",
+    "dev": "npm run build:contracts && npm run web -w @omnilient/mobile",
+    "build": "npm run build:contracts && npm run build -w @omnilient/mobile && node scripts/prepare-pages.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint -w @omnilient/mobile",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "@types/node": "^22.18.0"
+  }
+}
