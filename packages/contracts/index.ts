@@ -93,6 +93,7 @@ export const CreateTopicSchema = z
     id: IdSchema.optional(),
     subjectId: IdSchema,
     parentId: IdSchema.nullable().default(null),
+    isLesson: z.boolean().default(false),
     order: OrderSchema.default(0),
     translations: translations(TopicNameSchema),
   })
@@ -100,6 +101,7 @@ export const CreateTopicSchema = z
 export const EditTopicSchema = z
   .object({
     parentId: IdSchema.nullable().optional(),
+    isLesson: z.boolean().optional(),
     order: OrderSchema.optional(),
     translations: translations(TopicNameSchema).optional(),
   })
@@ -108,7 +110,7 @@ export const EditTopicSchema = z
     (data) => Object.keys(data).length > 0,
     "Provide at least one topic field to edit",
   );
-export const CreateLessonSchema = z
+const LessonDraftSchema = z
   .object({
     id: IdSchema.optional(),
     order: OrderSchema.default(0),
@@ -164,6 +166,62 @@ export const QuizContentSchema = z
         ctx.addIssue({ code: "custom", message: "Duplicate option IDs" });
   });
 export type QuizContent = z.infer<typeof QuizContentSchema>;
+
+const AuthorQuestionSchema = z.discriminatedUnion("type", [
+  z.object({
+    id: IdSchema,
+    type: z.literal("multiple-choice"),
+    prompt: z.string().trim().min(1).max(10000),
+    options: z.array(z.object({ id: IdSchema, text: z.string().trim().min(1).max(4000) }).strict()).min(2).max(20),
+    correctOptionId: IdSchema,
+    explanation: z.string().trim().min(1).max(10000),
+  }).strict(),
+  z.object({
+    id: IdSchema,
+    type: z.literal("free-text"),
+    prompt: z.string().trim().min(1).max(10000),
+    acceptedAnswers: z.array(z.string().trim().min(1).max(2000)).min(1).max(50),
+    explanation: z.string().trim().min(1).max(10000),
+  }).strict(),
+]);
+export const QuizDraftSchema = z.object({
+  id: IdSchema.optional(),
+  translations: translations(z.object({
+    language: LanguageSchema,
+    title: z.string().trim().min(1).max(250),
+    questions: z.array(AuthorQuestionSchema).min(1).max(100),
+  }).strict()),
+}).strict().superRefine((quiz, ctx) => {
+  let canonical: string | undefined;
+  for (const t of quiz.translations) {
+    if (new Set(t.questions.map(q => q.id)).size !== t.questions.length)
+      ctx.addIssue({ code: "custom", message: "Duplicate question IDs" });
+    for (const q of t.questions) {
+      if (q.type !== "multiple-choice") continue;
+      const ids = q.options.map(o => o.id);
+      if (new Set(ids).size !== ids.length)
+        ctx.addIssue({ code: "custom", message: "Duplicate option IDs" });
+      if (!ids.includes(q.correctOptionId))
+        ctx.addIssue({ code: "custom", message: "Correct option must belong to the question" });
+    }
+    const shape = JSON.stringify(t.questions.map(q => ({
+      id: q.id, type: q.type,
+      options: q.type === "multiple-choice" ? q.options.map(o => o.id).sort() : [],
+      correct: q.type === "multiple-choice" ? q.correctOptionId : null,
+    })).sort((a, b) => a.id.localeCompare(b.id)));
+    if (canonical !== undefined && canonical !== shape)
+      ctx.addIssue({ code: "custom", message: "Translations must share question IDs, types, option IDs and correct option IDs" });
+    canonical = shape;
+  }
+});
+export type QuizDraft = z.infer<typeof QuizDraftSchema>;
+export const CreateQuizSchema = QuizDraftSchema.safeExtend({ publish: z.boolean().default(false) });
+export const CreateLessonSchema = LessonDraftSchema.extend({ quiz: QuizDraftSchema.optional() })
+  .superRefine((lesson, ctx) => {
+    if (lesson.quiz && lesson.translations.map(t => t.language).sort().join() !==
+      lesson.quiz.translations.map(t => t.language).sort().join())
+      ctx.addIssue({ code: "custom", message: "Bundled lesson and quiz must have the same translation languages" });
+  });
 export const SubmissionSchema = z
   .object({
     quizId: IdSchema,
@@ -207,6 +265,7 @@ export interface Topic {
   id: string;
   disciplineId: string;
   parentId: string | null;
+  isLesson: boolean;
   name: string;
   order: number;
   lessons: LessonMetadata[];

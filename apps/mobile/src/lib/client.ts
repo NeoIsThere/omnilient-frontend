@@ -51,7 +51,7 @@ export async function api<T>(
   }
 }
 const inflight = new Map<string, Promise<LessonContent | QuizContent>>();
-const prefix = "omnilient:v1:content:";
+const prefix = "omnilient:v2:content:";
 async function fetchContent(
   kind: "lessons" | "quizzes",
   base: string,

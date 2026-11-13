@@ -3,7 +3,6 @@ import { Pressable, TextInput, View, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import { useApp } from "../lib/state";
 import { Shell } from "../components/Shell";
-import { TopicTree } from "../components/TopicTree";
 import {
   Button,
   colors,
@@ -16,8 +15,7 @@ export default function Explore() {
   const { tr, catalog, error, retry, language, session } = useApp();
   const { width } = useWindowDimensions(),
     compact = width < 700;
-  const [query, setQuery] = useState(""),
-    [selected, setSelected] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
   if (!catalog)
     return (
       <Shell>
@@ -37,7 +35,6 @@ export default function Explore() {
   const term = query.trim().toLocaleLowerCase(language);
   const matches = (value: string) => value.toLocaleLowerCase(language).includes(term);
   const visibleDisciplines = catalog.disciplines.filter(d =>
-    (!selected || selected === d.id) &&
     (matches(d.name) || d.topics.some(t => matches(t.name) || t.lessons.some(l => matches(`${l.title} ${l.summary}`)))),
   );
   const featured = lessons[0];
@@ -66,7 +63,7 @@ export default function Explore() {
           "Suivez votre curiosité. Découvrez les idées qui relient notre monde.",
         )}
       </Label>
-      {featured && !query && !selected && (
+      {featured && !query && (
         <View
           style={{
             borderRadius: 18,
@@ -245,25 +242,26 @@ export default function Explore() {
           {catalog.disciplines.length} {tr("disciplines", "disciplines")}
         </Label>
       </View>
+      <TextInput accessibilityLabel={tr("Search the library", "Rechercher dans la bibliothèque")}
+        value={query} onChangeText={setQuery} placeholder={tr("Search disciplines, topics and lessons…", "Rechercher des disciplines, thèmes et leçons…")}
+        placeholderTextColor={colors.muted} style={[styles.input, { marginBottom: 20, fontSize: 14 }]} />
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>
-        {catalog.disciplines.map((d) => {
+        {visibleDisciplines.map((d) => {
           const count = d.topics.reduce((n, t) => n + t.lessons.length, 0);
           return (
             <Pressable
               key={d.id}
-              accessibilityRole="button"
-              accessibilityState={{ selected: selected === d.id }}
-              onPress={() => setSelected(selected === d.id ? null : d.id)}
+              accessibilityRole="link"
+              accessibilityLabel={`Open ${d.name}`}
+              onPress={() => router.push({ pathname: "/discipline/[id]", params: { id: d.id, ...(query ? { q: matches(d.name) ? "" : query } : {}) } })}
               style={({ hovered }: { pressed: boolean; hovered?: boolean }) => [
                 {
                   width: compact ? "100%" : width < 1300 ? "48.5%" : "32%",
                   minHeight: 198,
-                  backgroundColor: selected === d.id ? "#F0F4E9" : "#FFFFFF",
+                  backgroundColor: "#FFFFFF",
                   borderWidth: 1,
                   borderColor:
-                    selected === d.id
-                      ? "#577649"
-                      : hovered
+                    hovered
                         ? "#A5B394"
                         : colors.line,
                   borderRadius: 13,
@@ -323,76 +321,9 @@ export default function Explore() {
           );
         })}
       </View>
-      <View
-        style={{
-          marginTop: 39,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 14,
-        }}
-      >
-        <Label display accessibilityRole="header" style={{ fontSize: 25 }}>
-          {selected
-            ? catalog.disciplines.find((d) => d.id === selected)?.name
-            : tr("Explore the curriculum", "Explorez le programme")}
-        </Label>
-        <TextInput
-          accessibilityLabel={tr("Search topics and lessons", "Rechercher des thèmes et des leçons")}
-          value={query}
-          onChangeText={setQuery}
-          placeholder={tr(
-            "Search the library…",
-            "Rechercher dans la bibliothèque…",
-          )}
-          placeholderTextColor={colors.muted}
-          style={[
-            styles.input,
-            {
-              fontSize: 13,
-              minWidth: compact ? "100%" : 275,
-              paddingVertical: 10,
-            },
-          ]}
-        />
-      </View>
-      {selected && (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setSelected(null)}
-          style={{ alignSelf: "flex-start", paddingVertical: 15 }}
-        >
-          <Label style={{ fontSize: 12 }}>
-            × {tr("Show all disciplines", "Afficher toutes les disciplines")}
-          </Label>
-        </Pressable>
-      )}
-      <View style={{ marginTop: 18, gap: 24 }}>
-        {visibleDisciplines.map(discipline => (
-          <View key={discipline.id} style={{ gap: 12 }}>
-            {!selected && (
-              <Label display accessibilityRole="header" style={{ fontSize: 21 }}>
-                {discipline.name}
-              </Label>
-            )}
-            <TopicTree
-              topics={discipline.topics}
-              query={matches(discipline.name) ? "" : query}
-            />
-          </View>
-        ))}
-        {!visibleDisciplines.length && (
-          <View style={[styles.card, { padding: 24 }]}>
-            <Label display style={{ fontSize: 22 }}>
-              {tr("No topics or lessons found", "Aucun thème ni aucune leçon trouvés")}
-            </Label>
-            <Label style={{ color: colors.muted, marginTop: 8 }}>
-              {tr("Try another search or clear the discipline filter.", "Essayez une autre recherche ou retirez le filtre de discipline.")}
-            </Label>
-          </View>
-        )}
-      </View>
+      {!visibleDisciplines.length && <Label style={{ marginTop: 24, color: colors.muted }}>
+        {tr("No matching disciplines, topics or lessons.", "Aucune discipline, aucun thème ni aucune leçon correspondants.")}
+      </Label>}
       {!session && (
         <View
           style={{

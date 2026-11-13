@@ -45,6 +45,7 @@ function useStateValue() {
         AsyncStorage.multiRemove(
           keys.filter(
             (key) =>
+              key.startsWith("omnilient:v1:") ||
               key.startsWith("omnilient:content:") ||
               key.startsWith("omnilient:catalog:"),
           ),
@@ -68,7 +69,7 @@ function useStateValue() {
         if (!active) return;
         setCatalogState({ language, reload, data, error: "", offline: false });
         AsyncStorage.setItem(
-          `omnilient:v1:catalog:${language}`,
+          `omnilient:v2:catalog:${language}`,
           JSON.stringify(data),
         ).catch(() => {});
         const first = data.disciplines.flatMap((d) =>
@@ -87,7 +88,7 @@ function useStateValue() {
         if (!active) return;
         try {
           const cached = await AsyncStorage.getItem(
-            `omnilient:v1:catalog:${language}`,
+            `omnilient:v2:catalog:${language}`,
           );
           if (cached && active) {
             const value = JSON.parse(cached);

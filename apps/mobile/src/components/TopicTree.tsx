@@ -1,118 +1,98 @@
+import { useMemo, useState } from "react";
 import { Pressable, View, useWindowDimensions } from "react-native";
 import { Link } from "expo-router";
 import type { Topic } from "@omnilient/contracts";
 import { useApp } from "../lib/state";
 import { content } from "../lib/client";
 import { colors, Label } from "./ui";
+
 export function TopicTree({ topics, query = "" }: { topics: Topic[]; query?: string }) {
   const { tr, language, catalog, progress } = useApp();
   const compact = useWindowDimensions().width < 700;
+  const [expanded, setExpanded] = useState(() => new Set(topics.filter(t => !t.parentId).map(t => t.id)));
   const term = query.trim().toLocaleLowerCase(language);
-  const matches = (text: string) => text.toLocaleLowerCase(language).includes(term);
-  const byId = new Map(topics.map(topic => [topic.id, topic]));
-  const children = new Map<string | null, Topic[]>();
-  for (const topic of topics) {
-    const parent = topic.parentId && byId.has(topic.parentId) ? topic.parentId : null;
-    children.set(parent, [...(children.get(parent) || []), topic]);
-  }
-  for (const siblings of children.values()) siblings.sort((a, b) => a.order - b.order);
-  const rows: { topic: Topic; depth: number }[] = [];
-  const seen = new Set<string>();
-  function visit(topic: Topic, depth: number) {
-    if (seen.has(topic.id)) return;
-    seen.add(topic.id);
-    rows.push({ topic, depth });
-    for (const child of children.get(topic.id) || []) visit(child, depth + 1);
-  }
-  for (const root of children.get(null) || []) visit(root, 0);
-  // Keep every supplied topic visible even when a parent is absent or malformed.
-  for (const topic of [...topics].sort((a, b) => a.order - b.order)) visit(topic, 0);
-  function ancestors(topic: Topic) {
-    const chain: Topic[] = [];
-    const visited = new Set<string>();
-    let current: Topic | undefined = topic;
-    while (current && !visited.has(current.id)) {
-      visited.add(current.id);
-      chain.push(current);
-      current = current.parentId ? byId.get(current.parentId) : undefined;
+  const { rows, branches, visible, matchingBranches } = useMemo(() => {
+    const byId = new Map(topics.map(t => [t.id, t]));
+    const children = new Map<string | null, Topic[]>();
+    for (const topic of topics) {
+      const parent = topic.parentId && byId.has(topic.parentId) ? topic.parentId : null;
+      const siblings = children.get(parent) || [];
+      siblings.push(topic); children.set(parent, siblings);
     }
-    return chain;
-  }
-  const branchMatches = (topic: Topic) => !term || ancestors(topic).some(t => matches(t.name));
-  const visible = new Set<string>();
-  for (const { topic } of rows) {
-    if (branchMatches(topic) || topic.lessons.some(l => matches(`${l.title} ${l.summary}`))) {
-      for (const ancestor of ancestors(topic)) visible.add(ancestor.id);
+    for (const siblings of children.values()) siblings.sort((a, b) => a.order - b.order);
+    const rows: { topic: Topic; ancestors: string[] }[] = [], seen = new Set<string>();
+    function visit(topic: Topic, ancestors: string[]) {
+      if (seen.has(topic.id)) return;
+      seen.add(topic.id); rows.push({ topic, ancestors });
+      for (const child of children.get(topic.id) || []) visit(child, [...ancestors, topic.id]);
     }
-  }
-  return (
-    <View
-      style={{
-        borderWidth: 1,
-        borderColor: colors.line,
-        borderRadius: 12,
-        padding: compact ? 16 : 22,
-        backgroundColor: "white",
-        gap: 18,
-      }}
-    >
-      {!topics.length && <Label style={{ color: colors.muted }}>{tr("No topics yet.", "Aucun thème pour le moment.")}</Label>}
-      {rows.filter(({ topic }) => visible.has(topic.id)).map(({ topic, depth }) => (
-        <View
-          key={topic.id}
-          style={{
-            marginLeft: Math.min(depth, compact ? 4 : 6) * (compact ? 12 : 20),
-            borderLeftWidth: depth ? 1 : 0,
-            borderLeftColor: colors.line,
-            paddingLeft: depth ? 12 : 0,
-            gap: 10,
-          }}
-        >
-          <View style={{ flexDirection: "row", gap: 9, alignItems: "flex-start" }}>
-            <Label style={{ color: colors.muted }}>{depth ? "↳" : "○"}</Label>
-            <Label accessibilityRole="header" style={{ fontFamily: "Medium", flex: 1 }}>
-              {topic.name}
-            </Label>
+    for (const root of children.get(null) || []) visit(root, []);
+    for (const topic of topics) visit(topic, []);
+    const branches = new Set([...children.keys()].filter((id): id is string => id !== null));
+    const matchingBranches = new Set(topics.filter(t => t.name.toLocaleLowerCase(language).includes(term)).map(t => t.id));
+    const visible = new Set<string>();
+    for (const { topic, ancestors } of rows) {
+      if (!term || matchingBranches.has(topic.id) || ancestors.some(id => matchingBranches.has(id)) ||
+        topic.lessons.some(l => `${l.title} ${l.summary}`.toLocaleLowerCase(language).includes(term))) {
+        visible.add(topic.id);
+        for (const id of ancestors) visible.add(id);
+      }
+    }
+    return { rows, branches, visible, matchingBranches };
+  }, [topics, term, language]);
+  const shown = rows.filter(({ topic, ancestors }) => visible.has(topic.id) && (term || ancestors.every(id => expanded.has(id))));
+  const toggle = (id: string) => setExpanded(old => {
+    const next = new Set(old);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  return <View style={{ gap: 12 }}>
+    {!term && branches.size > 0 && <View style={{ flexDirection: "row", gap: 20 }}>
+      <Pressable accessibilityRole="button" onPress={() => setExpanded(new Set(branches))} style={{ paddingVertical: 10 }}>
+        <Label style={{ fontSize: 12, color: colors.green }}>{tr("Expand all", "Tout développer")}</Label>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={() => setExpanded(new Set())} style={{ paddingVertical: 10 }}>
+        <Label style={{ fontSize: 12, color: colors.green }}>{tr("Collapse all", "Tout réduire")}</Label>
+      </Pressable>
+    </View>}
+    <View style={{ borderWidth: 1, borderColor: colors.line, borderRadius: 12, padding: compact ? 12 : 20, backgroundColor: "white", gap: 8 }}>
+      {!shown.length && <Label style={{ color: colors.muted, padding: 12 }}>
+        {topics.length ? tr("No matching topics or lessons.", "Aucun thème ni aucune leçon correspondants.") : tr("No topics yet.", "Aucun thème pour le moment.")}
+      </Label>}
+      {shown.map(({ topic, ancestors }) => {
+        const branch = branches.has(topic.id), open = !!term || expanded.has(topic.id);
+        const label = <>
+          <Label style={{ color: colors.green, width: 16 }}>{branch ? open ? "−" : "+" : topic.isLesson ? "◇" : "○"}</Label>
+          <View style={{ flex: 1, gap: 5 }}>
+            <Label style={{ fontFamily: branch ? "Medium" : "Body", fontSize: compact ? 13 : 14, lineHeight: 22 }}>{topic.name}</Label>
+            {topic.isLesson && <Label style={{ fontSize: 10, color: colors.muted }}>
+              {tr("LESSON", "LEÇON")} · {topic.lessons.length ? tr("Available", "Disponible") : tr("Planned", "À venir")}
+            </Label>}
           </View>
-          {[...topic.lessons]
-            .sort((a, b) => a.order - b.order)
-            .filter(lesson => branchMatches(topic) || matches(`${lesson.title} ${lesson.summary}`))
+        </>;
+        return <View key={topic.id} style={{ marginLeft: Math.min(ancestors.length, 5) * (compact ? 10 : 22), borderLeftWidth: ancestors.length ? 1 : 0, borderLeftColor: colors.line, paddingLeft: ancestors.length ? 8 : 0 }}>
+          {branch ? <Pressable accessibilityRole="button" accessibilityLabel={topic.name} accessibilityState={{ expanded: open }}
+            disabled={!!term} onPress={() => toggle(topic.id)} style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 12 }}>
+            {label}
+          </Pressable> : <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 12 }}>{label}</View>}
+          {[...topic.lessons].sort((a, b) => a.order - b.order)
+            .filter(l => !term || matchingBranches.has(topic.id) || ancestors.some(id => matchingBranches.has(id)) || `${l.title} ${l.summary}`.toLocaleLowerCase(language).includes(term))
             .map(lesson => {
               const completed = progress.some(p => p.lessonId === lesson.id && p.completed);
-              return (
-                <Link key={lesson.id} href={`/lesson/${lesson.id}`} asChild>
-                  <Pressable
-                    accessibilityRole="link"
-                    accessibilityLabel={`${lesson.title}, ${lesson.minutes} min${completed ? `, ${tr("Completed", "Terminée")}` : ""}`}
-                    onHoverIn={() => {
-                      if (catalog) content("lessons", catalog.cdnBaseUrl, lesson.id, language, lesson.version).catch(() => {});
-                    }}
-                    style={{
-                      marginLeft: compact ? 10 : 24,
-                      padding: compact ? 13 : 16,
-                      borderWidth: 1,
-                      borderColor: colors.line,
-                      borderRadius: 10,
-                      backgroundColor: "#F6F8F2",
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 12,
-                    }}
-                  >
-                    <View style={{ flex: 1, gap: 4 }}>
-                      <Label style={{ fontSize: 11, color: colors.muted }}>
-                        {tr("Lesson", "Leçon")} · {lesson.minutes} min
-                      </Label>
-                      <Label style={{ fontFamily: "Medium", fontSize: 16 }}>{lesson.title}</Label>
-                      {!!lesson.summary && <Label style={{ fontSize: 12, color: colors.muted }} numberOfLines={2}>{lesson.summary}</Label>}
-                    </View>
-                    <Label>{completed ? "✓" : "→"}</Label>
-                  </Pressable>
-                </Link>
-              );
+              return <Link key={lesson.id} href={`/lesson/${lesson.id}`} asChild>
+                <Pressable accessibilityRole="link" accessibilityLabel={`${lesson.title}, ${completed ? tr("Completed", "Terminée") : tr("Read lesson", "Lire la leçon")}`}
+                  onHoverIn={() => { if (catalog) content("lessons", catalog.cdnBaseUrl, lesson.id, language, lesson.version).catch(() => {}); }}
+                  style={{ marginLeft: 24, marginBottom: 10, padding: 14, borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: "#F0F4E9", flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  <View style={{ flex: 1, gap: 5 }}>
+                    <Label style={{ fontFamily: "Medium", fontSize: 14 }}>{lesson.title}</Label>
+                    <Label style={{ fontSize: 11, color: colors.muted }}>{lesson.minutes} min · {completed ? tr("Completed", "Terminée") : tr("Read lesson", "Lire la leçon")}</Label>
+                  </View>
+                  <Label>{completed ? "✓" : "→"}</Label>
+                </Pressable>
+              </Link>;
             })}
-        </View>
-      ))}
+        </View>;
+      })}
     </View>
-  );
+  </View>;
 }
