@@ -38,8 +38,10 @@ restores the original URL before Expo starts. This supports browser refreshes,
 but the initial dynamic-path request returns HTTP 404 and it is not an SEO
 prerendering solution. Newly published lessons do not require a frontend rebuild.
 
-The local demo button is excluded from production. Session tokens currently stay
-in memory, so a full refresh requires signing in again. Password recovery and
+The local demo button is excluded from production. Session tokens are restored
+from device storage after a refresh until their eight-hour expiry. Topic numbers
+are calculated from the live catalog hierarchy and order; topic IDs and names
+do not contain display numbers. Password recovery and
 email verification are not implemented by this deployment work.
 
 `packages/contracts` is the same public schema snapshot used by the backend;

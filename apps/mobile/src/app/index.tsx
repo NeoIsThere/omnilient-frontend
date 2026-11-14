@@ -3,6 +3,7 @@ import { Pressable, TextInput, View, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import { useApp } from "../lib/state";
 import { Shell } from "../components/Shell";
+import { displayLessonTitle, displayTopicName, numberTopics } from "../lib/topic-numbering";
 import {
   Button,
   colors,
@@ -22,21 +23,26 @@ export default function Explore() {
         {error ? <ErrorBox message={error} retry={retry} /> : <Loading />}
       </Shell>
     );
-  const lessons = catalog.disciplines.flatMap((d) =>
-    d.topics.flatMap((t) =>
+  const lessons = catalog.disciplines.flatMap((d) => {
+    const numbers = numberTopics(d.topics);
+    return d.topics.flatMap((t) =>
       t.lessons.map((l) => ({
         ...l,
+        title: displayLessonTitle(l.title, t.id, numbers),
         discipline: d.name,
         disciplineId: d.id,
-        topic: t.name,
+        topic: displayTopicName(t, numbers),
       })),
-    ),
-  );
+    );
+  });
   const term = query.trim().toLocaleLowerCase(language);
   const matches = (value: string) => value.toLocaleLowerCase(language).includes(term);
-  const visibleDisciplines = catalog.disciplines.filter(d =>
-    (matches(d.name) || d.topics.some(t => matches(t.name) || t.lessons.some(l => matches(`${l.title} ${l.summary}`)))),
-  );
+  const visibleDisciplines = catalog.disciplines.filter(d => {
+    const numbers = numberTopics(d.topics);
+    return matches(d.name) || d.topics.some(t =>
+      matches(displayTopicName(t, numbers)) ||
+      t.lessons.some(l => matches(`${displayLessonTitle(l.title, t.id, numbers)} ${l.summary}`)));
+  });
   const featured = lessons[0];
   return (
     <Shell>

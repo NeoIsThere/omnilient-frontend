@@ -66,7 +66,13 @@ function translations<T extends { language: Language }>(schema: z.ZodType<T>) {
     );
 }
 const TopicNameSchema = z
-  .object({ language: LanguageSchema, name: NameSchema })
+  .object({
+    language: LanguageSchema,
+    name: NameSchema.refine(
+      (name) => !/^(?:Part\s+[IVXLCDM]+\s*[—-]\s*|\d+(?:\.\d+)+\.?\s+|\d+\.\s+)/i.test(name),
+      "Enter the topic name without an outline number",
+    ),
+  })
   .strict();
 export const CreateSubjectSchema = z
   .object({
@@ -94,14 +100,18 @@ export const CreateTopicSchema = z
     subjectId: IdSchema,
     parentId: IdSchema.nullable().default(null),
     isLesson: z.boolean().default(false),
+    isPart: z.boolean().default(false),
     order: OrderSchema.default(0),
     translations: translations(TopicNameSchema),
   })
-  .strict();
+  .strict()
+  .refine((topic) => !topic.isPart || (topic.parentId === null && !topic.isLesson),
+    "A part must be a root heading, not a lesson");
 export const EditTopicSchema = z
   .object({
     parentId: IdSchema.nullable().optional(),
     isLesson: z.boolean().optional(),
+    isPart: z.boolean().optional(),
     order: OrderSchema.optional(),
     translations: translations(TopicNameSchema).optional(),
   })
@@ -266,6 +276,7 @@ export interface Topic {
   disciplineId: string;
   parentId: string | null;
   isLesson: boolean;
+  isPart: boolean;
   name: string;
   order: number;
   lessons: LessonMetadata[];

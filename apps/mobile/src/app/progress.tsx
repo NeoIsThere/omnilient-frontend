@@ -3,6 +3,7 @@ import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import type { Attempt } from "@omnilient/contracts";
 import { useApp } from "../lib/state";
+import { displayLessonTitle, numberTopics } from "../lib/topic-numbering";
 import { Shell } from "../components/Shell";
 import {
   Button,
@@ -67,9 +68,13 @@ function Progress() {
     average = attempts?.length
       ? Math.round(attempts.reduce((n, a) => n + a.score, 0) / attempts.length)
       : 0;
-  const lessons =
-    catalog?.disciplines.flatMap((d) => d.topics.flatMap((t) => t.lessons)) ||
-    [];
+  const lessons = catalog?.disciplines.flatMap((d) => {
+    const numbers = numberTopics(d.topics);
+    return d.topics.flatMap((t) => t.lessons.map((l) => ({
+      ...l,
+      title: displayLessonTitle(l.title, t.id, numbers),
+    })));
+  }) || [];
   return (
     <Shell>
       <Label style={styles.eyebrow}>

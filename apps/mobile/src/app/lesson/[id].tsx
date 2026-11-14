@@ -6,6 +6,7 @@ import { useApp } from "../../lib/state";
 import { api, content } from "../../lib/client";
 import { Shell } from "../../components/Shell";
 import { LessonImage } from "../../components/LessonImage";
+import { displayLessonTitle, numberTopics } from "../../lib/topic-numbering";
 import {
   Button,
   colors,
@@ -37,9 +38,11 @@ function Lesson({ id }: { id: string }) {
     [saveError, setSaveError] = useState(""),
     [busy, setBusy] = useState(false),
     [attempt, setAttempt] = useState(0);
-  const metadata = catalog?.disciplines
-    .flatMap((d) => d.topics.flatMap((t) => t.lessons))
-    .find((l) => l.id === id);
+  const discipline = catalog?.disciplines.find((d) =>
+    d.topics.some((t) => t.lessons.some((l) => l.id === id)));
+  const topic = discipline?.topics.find((t) => t.lessons.some((l) => l.id === id));
+  const metadata = topic?.lessons.find((l) => l.id === id);
+  const numbers = discipline ? numberTopics(discipline.topics) : new Map<string, string>();
   useEffect(() => {
     if (!catalog || !metadata) return;
     let active = true;
@@ -138,7 +141,7 @@ function Lesson({ id }: { id: string }) {
               },
             ]}
           >
-            {document.title}
+            {topic ? displayLessonTitle(document.title, topic.id, numbers) : document.title}
           </Label>
           <Label style={[styles.subtitle, { marginTop: 15 }]}>
             {document.summary}
