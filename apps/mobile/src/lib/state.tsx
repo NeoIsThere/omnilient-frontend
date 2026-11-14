@@ -51,6 +51,7 @@ function useStateValue() {
     }>({ userId: "", items: [] });
   const progress =
     session?.user.id === progressState.userId ? progressState.items : [];
+  const sessionToken = session?.token;
   const tr = useCallback(
     (en: string, fr: string) => (language === "en" ? en : fr),
     [language],
@@ -74,6 +75,36 @@ function useStateValue() {
       : AsyncStorage.removeItem(sessionKey)
     ).catch(() => {});
   }, [session, sessionReady]);
+  useEffect(() => {
+    if (!sessionReady || !sessionToken) return;
+    let active = true;
+    const refreshUser = () => {
+      api<Session["user"]>("/me", { token: sessionToken })
+        .then((user) => {
+          if (!active) return;
+          setSession((old) => {
+            if (old?.token !== sessionToken) return old;
+            if (
+              old.user.id === user.id &&
+              old.user.name === user.name &&
+              old.user.email === user.email &&
+              old.user.isAdmin === user.isAdmin
+            ) return old;
+            return { ...old, user };
+          });
+        })
+        .catch((error) => {
+          if (active && error instanceof ApiError && error.status === 401)
+            setSession((old) => (old?.token === sessionToken ? null : old));
+        });
+    };
+    refreshUser();
+    const timer = setInterval(refreshUser, 60_000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [sessionReady, sessionToken]);
   useEffect(() => {
     // Retire caches from the initial scaffold without touching user preferences.
     AsyncStorage.getAllKeys()
