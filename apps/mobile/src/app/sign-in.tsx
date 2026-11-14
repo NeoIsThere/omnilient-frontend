@@ -21,7 +21,7 @@ export default function SignIn() {
     try {
       const response = await api<{
         token: string;
-        user: { id: string; name: string; email: string };
+        user: { id: string; name: string; email: string; isAdmin: boolean };
       }>(`/auth/${register && !demo ? "register" : "login"}`, {
         method: "POST",
         body: demo

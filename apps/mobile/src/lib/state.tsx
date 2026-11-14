@@ -10,7 +10,7 @@ import type { Catalog, Language, Progress } from "@omnilient/contracts";
 import { api, ApiError, content } from "./client";
 type Session = {
   token: string;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; isAdmin: boolean };
 };
 function useStateValue() {
   const [language, setLanguageState] = useState<Language>("en");

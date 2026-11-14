@@ -3,6 +3,7 @@ import { Pressable, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Shell } from "../../components/Shell";
 import { TopicTree } from "../../components/TopicTree";
+import { DeleteControl } from "../../components/DeleteControl";
 import { colors, ErrorBox, Label, Loading, styles } from "../../components/ui";
 import { useApp } from "../../lib/state";
 
@@ -24,6 +25,7 @@ function Discipline({ id, initialQuery }: { id: string; initialQuery: string }) 
     {!discipline ? <Label>{tr("Discipline not found.", "Discipline introuvable.")}</Label> : <>
       <Label style={styles.eyebrow}>{tr("EXPLORE THE CURRICULUM", "EXPLOREZ LE PROGRAMME")}</Label>
       <Label display accessibilityRole="header" style={[styles.title, { marginTop: 12 }]}>{discipline.name}</Label>
+      <DeleteControl kind="subjects" id={id} name={discipline.name} onDeleted={() => router.replace("/")} />
       <Label style={[styles.subtitle, { marginTop: 10 }]}>{discipline.description}</Label>
       <Label style={{ color: colors.muted, fontSize: 12, marginVertical: 20 }}>
         {discipline.topics.filter(t => !t.isLesson).length} {tr("topics", "thèmes")} · {discipline.topics.filter(t => t.isLesson).length} {tr("planned lessons", "leçons prévues")} · {lessons.length} {tr("available", "disponibles")}

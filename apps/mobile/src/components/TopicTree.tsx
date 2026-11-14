@@ -5,6 +5,7 @@ import type { Topic } from "@omnilient/contracts";
 import { useApp } from "../lib/state";
 import { content } from "../lib/client";
 import { colors, Label } from "./ui";
+import { DeleteControl } from "./DeleteControl";
 
 export function TopicTree({ topics, query = "" }: { topics: Topic[]; query?: string }) {
   const { tr, language, catalog, progress } = useApp();
@@ -75,6 +76,7 @@ export function TopicTree({ topics, query = "" }: { topics: Topic[]; query?: str
             disabled={!!term} onPress={() => toggle(topic.id)} style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 12 }}>
             {label}
           </Pressable> : <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 12 }}>{label}</View>}
+          <DeleteControl kind="topics" id={topic.id} name={topic.name} />
           {[...topic.lessons].sort((a, b) => a.order - b.order)
             .filter(l => !term || matchingBranches.has(topic.id) || ancestors.some(id => matchingBranches.has(id)) || `${l.title} ${l.summary}`.toLocaleLowerCase(language).includes(term))
             .map(lesson => {

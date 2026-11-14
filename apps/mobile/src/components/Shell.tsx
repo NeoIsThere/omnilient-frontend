@@ -158,6 +158,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </Pressable>
           )}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 18 }}>
+            {session?.user.isAdmin && <Label style={{ fontSize: 11, color: colors.green, fontFamily: "Medium" }}>
+              {tr("ADMIN", "ADMIN")}
+            </Label>}
             <View
               style={{
                 flexDirection: "row",
