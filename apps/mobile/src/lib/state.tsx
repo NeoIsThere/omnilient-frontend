@@ -8,10 +8,26 @@ import React, {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Catalog, Language, Progress } from "@omnilient/contracts";
 import { api, ApiError, content } from "./client";
+import { Loading } from "../components/ui";
 type Session = {
   token: string;
   user: { id: string; name: string; email: string; isAdmin: boolean };
 };
+const sessionKey = "omnilient:session";
+function storedSession(value: string | null): Session | null {
+  if (!value) return null;
+  try {
+    const session = JSON.parse(value) as Session;
+    if (
+      typeof session.token === "string" &&
+      typeof session.user?.id === "string" &&
+      typeof session.user.name === "string" &&
+      typeof session.user.email === "string" &&
+      typeof session.user.isAdmin === "boolean"
+    ) return session;
+  } catch {}
+  return null;
+}
 function useStateValue() {
   const [language, setLanguageState] = useState<Language>("en");
   const [catalogState, setCatalogState] = useState<{
@@ -28,6 +44,7 @@ function useStateValue() {
     error = catalogCurrent ? catalogState.error : "",
     offline = catalogCurrent ? catalogState.offline : false;
   const [session, setSession] = useState<Session | null>(null),
+    [sessionReady, setSessionReady] = useState(false),
     [progressState, setProgressState] = useState<{
       userId: string;
       items: Progress[];
@@ -38,6 +55,25 @@ function useStateValue() {
     (en: string, fr: string) => (language === "en" ? en : fr),
     [language],
   );
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(sessionKey)
+      .then((value) => {
+        if (active) setSession(storedSession(value));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setSessionReady(true);
+      });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!sessionReady) return;
+    (session
+      ? AsyncStorage.setItem(sessionKey, JSON.stringify(session))
+      : AsyncStorage.removeItem(sessionKey)
+    ).catch(() => {});
+  }, [session, sessionReady]);
   useEffect(() => {
     // Retire caches from the initial scaffold without touching user preferences.
     AsyncStorage.getAllKeys()
@@ -150,7 +186,10 @@ function useStateValue() {
         .then((v) => {
           if (active) setProgressState({ userId: session.user.id, items: v });
         })
-        .catch(() => {});
+        .catch((e) => {
+          if (active && e instanceof ApiError && e.status === 401)
+            setSession((old) => (old?.token === session.token ? null : old));
+        });
     return () => {
       active = false;
     };
@@ -180,6 +219,7 @@ function useStateValue() {
     offline,
     retry: () => setReload((v) => v + 1),
     session,
+    sessionReady,
     setSession,
     progress,
     saveProgress,
@@ -189,7 +229,7 @@ function useStateValue() {
 const Context = createContext<ReturnType<typeof useStateValue> | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const value = useStateValue();
-  return <Context.Provider value={value}>{children}</Context.Provider>;
+  return <Context.Provider value={value}>{value.sessionReady ? children : <Loading />}</Context.Provider>;
 }
 export function useApp() {
   const value = useContext(Context);
