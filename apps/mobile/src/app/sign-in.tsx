@@ -14,22 +14,17 @@ export default function SignIn() {
     [password, setPassword] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const submit = async (demo = false) => {
-    if (busy || (demo && !__DEV__)) return;
+  const submit = async () => {
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
       const response = await api<{
         token: string;
         user: { id: string; name: string; email: string; isAdmin: boolean };
-      }>(`/auth/${register && !demo ? "register" : "login"}`, {
+      }>(`/auth/${register ? "register" : "login"}`, {
         method: "POST",
-        body: demo
-          ? {
-              email: "learner@omnilient.local",
-              password: "Learning-local-2026!",
-            }
-          : { email, password, ...(register ? { name } : {}) },
+        body: { email, password, ...(register ? { name } : {}) },
       });
       setSession(response);
       router.replace(
@@ -162,28 +157,6 @@ export default function SignIn() {
             </Label>
           </Pressable>
         </View>
-        {__DEV__ && <View style={{ marginTop: 24, gap: 12 }}>
-          <Button secondary disabled={busy} onPress={() => submit(true)}>
-            {tr(
-              "Try the local demo account",
-              "Essayer le compte de démonstration local",
-            )}{" "}
-            →
-          </Button>
-          <Label
-            style={{
-              fontSize: 11,
-              lineHeight: 18,
-              textAlign: "center",
-              color: colors.muted,
-            }}
-          >
-            {tr(
-              "Demo account is shared on this computer. Create an account for your own progress. Sessions end when the app reloads.",
-              "Le compte de démonstration est partagé sur cet ordinateur. Créez votre compte pour une progression personnelle. La session se termine au rechargement.",
-            )}
-          </Label>
-        </View>}
       </View>
     </Shell>
   );

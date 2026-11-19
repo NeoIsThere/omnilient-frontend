@@ -120,6 +120,25 @@ export const EditTopicSchema = z
     (data) => Object.keys(data).length > 0,
     "Provide at least one topic field to edit",
   );
+const CatalogSubjectTranslationSchema = z.tuple([NameSchema, z.string().max(5000)]);
+export const CatalogUploadSchema = z.array(z.object({
+  id: IdSchema,
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  symbol: z.string().min(1).max(10),
+  en: CatalogSubjectTranslationSchema,
+  fr: CatalogSubjectTranslationSchema,
+  topics: z.array(z.object({
+    id: IdSchema,
+    parentId: IdSchema.nullable(),
+    isLesson: z.boolean().default(false),
+    isPart: z.boolean().default(false),
+    en: TopicNameSchema.shape.name,
+    fr: TopicNameSchema.shape.name,
+  }).strict().refine(
+    topic => !topic.isPart || (topic.parentId === null && !topic.isLesson),
+    "A part must be a root heading, not a lesson",
+  )).max(10000),
+}).strict()).min(1).max(100);
 const LessonDraftSchema = z
   .object({
     id: IdSchema.optional(),
