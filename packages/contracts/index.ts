@@ -42,7 +42,7 @@ export const LessonContentSchema = z
           })
           .strict(),
       )
-      .min(1),
+      .min(0),
   })
   .strict();
 export type LessonContent = z.infer<typeof LessonContentSchema>;
@@ -144,6 +144,7 @@ const LessonDraftSchema = z
     id: IdSchema.optional(),
     order: OrderSchema.default(0),
     publish: z.boolean().default(false),
+    onlyIfEmpty: z.boolean().default(false),
     translations: translations(
       LessonContentSchema.omit({
         schemaVersion: true,
@@ -251,6 +252,48 @@ export const CreateLessonSchema = LessonDraftSchema.extend({ quiz: QuizDraftSche
       lesson.quiz.translations.map(t => t.language).sort().join())
       ctx.addIssue({ code: "custom", message: "Bundled lesson and quiz must have the same translation languages" });
   });
+export const ReviseLessonSchema = z.object({
+  expectedRevision: VersionSchema,
+  translations: LessonDraftSchema.shape.translations,
+  // Omit to preserve quizzes; [] retires all of them without deleting history.
+  quizzes: z.array(QuizDraftSchema).max(10).optional(),
+}).strict().superRefine((draft, ctx) => {
+  const lessons = CreateLessonSchema.safeParse({ translations: draft.translations });
+  if (!lessons.success) ctx.addIssue({ code: "custom", message: lessons.error.message });
+  for (const quiz of draft.quizzes ?? []) {
+    const bundle = CreateLessonSchema.safeParse({ translations: draft.translations, quiz });
+    if (!bundle.success) ctx.addIssue({ code: "custom", message: bundle.error.message });
+  }
+});
+export const SplitTopicSchema = z.object({
+  expectedTitle: NameSchema,
+  children: z.array(z.object({ id: IdSchema, translations: translations(TopicNameSchema) }).strict()).min(2).max(12),
+}).strict().refine(value => new Set(value.children.map(c => c.id)).size === value.children.length, "Child IDs must be unique");
+const EvidenceSourceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("pdf"), title: z.string().trim().min(1).max(500), path: z.string().trim().min(1).max(1000), pages: z.array(VersionSchema).min(1).max(500), locator: z.string().trim().min(1).max(2000) }).strict(),
+  z.object({ kind: z.literal("web"), title: z.string().trim().min(1).max(500), url: z.string().url().refine(v => v.startsWith("https://")), locator: z.string().trim().min(1).max(2000), accessedOn: z.iso.date() }).strict(),
+]);
+export const FactCheckSchema = z.object({
+  expectedRevision: VersionSchema,
+  reviewedLanguages: z.array(LanguageSchema).min(1).max(2),
+  sourceMode: z.enum(["pdf", "web"]),
+  reviewNotes: z.string().trim().min(1).max(10000),
+  sources: z.array(EvidenceSourceSchema).min(1).max(100),
+  claims: z.array(z.object({
+    claim: z.string().trim().min(1).max(3000),
+    action: z.enum(["verified", "corrected", "removed"]),
+    sourceIndexes: z.array(z.number().int().nonnegative()).max(100),
+    notes: z.string().trim().min(1).max(3000),
+  }).strict()).min(1).max(3000),
+  allClaimsResolved: z.literal(true),
+}).strict().superRefine((report, ctx) => {
+  if (new Set(report.reviewedLanguages).size !== report.reviewedLanguages.length)
+    ctx.addIssue({ code: "custom", message: "Duplicate reviewed language" });
+  if (report.sources.some(s => s.kind !== report.sourceMode))
+    ctx.addIssue({ code: "custom", message: "Evidence must match the source mode" });
+  if (report.claims.some(c => (c.action !== "removed" && !c.sourceIndexes.length) || c.sourceIndexes.some(i => i >= report.sources.length)))
+    ctx.addIssue({ code: "custom", message: "Retained claims require valid source indexes" });
+});
 export const SubmissionSchema = z
   .object({
     quizId: IdSchema,
@@ -289,12 +332,14 @@ export interface LessonMetadata {
   minutes: number;
   language: Language;
   version: number;
+  isFactChecked?: boolean;
 }
 export interface Topic {
   id: string;
   disciplineId: string;
   parentId: string | null;
   isLesson: boolean;
+  isFactChecked?: boolean;
   isPart: boolean;
   name: string;
   order: number;
